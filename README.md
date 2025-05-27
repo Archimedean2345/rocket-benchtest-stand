@@ -26,3 +26,13 @@ Design and manufacture of an instrument for measuring propulsion parameters for 
 * Quality assurance of manufacture
 * Operations sheet procedure
 * Redaction of Manual Of Use
+
+## Research websites
+* https://www.sciencedirect.com/
+* https://link.springer.com/
+* https://onlinelibrary.wiley.com/
+* https://iopscience.iop.org/journalList
+* https://www.ieee.org/
+* https://www.tandfonline.com/
+* https://pubs.acs.org/
+* https://www.aps.org/
