@@ -18,4 +18,4 @@ Design and manufacture for an instrument for propulsion parameters of a rocket m
 * Process sheet of manufacturing
 * Quality assurance of manufacture
 * Operations sheet procedure
-*Redaction of Manual Of Use
+* Redaction of Manual Of Use
