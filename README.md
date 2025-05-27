@@ -1,6 +1,6 @@
 # Bench test stand "Maria"
 ## Objective
-Design and manufacture for an instrument for propulsion parameters of a rocket motor
+Design and manufacture of an instrument for measuring propulsion parameters for rocket motor class H to K
 
 ## Particular objectives
 * Restrictions of desired parameters to measure (maximum and minimums)
