@@ -15,8 +15,9 @@ Design and manufacture of an instrument for measuring propulsion parameters for 
 * Cost analysis of material and sensors 
 * Sensors involved and individual test
 * Data logging of parameters individually
-* Fusion of sensors and data sampling frequency
-* Data logging mixed
+* Fusion of sensors and data sampling coupling of frequency
+* Data logging fusion
+* Power electronics of data logging and sensing
 * Strucutral analysis proposal in function of restrictions
 * Conceptual design and materials designation
 * In-depth design of benchtest 
