@@ -1,11 +1,11 @@
 import config
 import RPi.GPIO as GPIO
 
-
+# modo de escaneo 0 (canales ind) y 1 (pares de canales)
 ScanMode = 0
 
 
-# gain channel
+# gain channel (amp de señal)
 ADS1256_GAIN_E = {'ADS1256_GAIN_1' : 0, # GAIN   1
                   'ADS1256_GAIN_2' : 1,	# GAIN   2
                   'ADS1256_GAIN_4' : 2,	# GAIN   4
@@ -15,7 +15,7 @@ ADS1256_GAIN_E = {'ADS1256_GAIN_1' : 0, # GAIN   1
                   'ADS1256_GAIN_64' : 6,# GAIN  64
                  }
 
-# data rate
+# data rate (muestreo de datos)
 ADS1256_DRATE_E = {'ADS1256_30000SPS' : 0xF0, # reset the default values
                    'ADS1256_15000SPS' : 0xE0,
                    'ADS1256_7500SPS' : 0xD0,
@@ -34,7 +34,7 @@ ADS1256_DRATE_E = {'ADS1256_30000SPS' : 0xF0, # reset the default values
                    'ADS1256_2d5SPS' : 0x03
                   }
 
-# registration definition
+# registration definition (registro interno de ADS1256)
 REG_E = {'REG_STATUS' : 0,  # x1H
          'REG_MUX' : 1,     # 01H
          'REG_ADCON' : 2,   # 20H
@@ -48,7 +48,7 @@ REG_E = {'REG_STATUS' : 0,  # x1H
          'REG_FSC2' : 10,   # xxH
         }
 
-# command definition
+# command definition (comm con SPI)
 CMD = {'CMD_WAKEUP' : 0x00,     # Completes SYNC and Exits Standby Mode 0000  0000 (00h)
        'CMD_RDATA' : 0x01,      # Read Data 0000  0001 (01h)
        'CMD_RDATAC' : 0x03,     # Read Data Continuously 0000   0011 (03h)
@@ -159,7 +159,7 @@ class ADS1256:
         else:
             print("ID Read failed   ")
             return -1
-        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_1'], ADS1256_DRATE_E['ADS1256_30000SPS'])
+        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_64'], ADS1256_DRATE_E['ADS1256_100SPS'])
         return 0
         
     def ADS1256_Read_ADC_Data(self):
