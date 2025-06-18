@@ -16,14 +16,15 @@ try:
 
     while True:
         # Selecciona canal diferencial AIN0-AIN1 (canal 0)
-        ADC.ADS1256_SetDiffChannal(0)
-        raw_value = ADC.ADS1256_GetChannalValue(0)
+        ADC.ADS1256_SetDiffChannal(1)
+        raw_value = ADC.ADS1256_GetChannalValue(1)
 
         # Convierte el valor crudo a voltaje
         voltage = raw_value * 5.0 / 0x7FFFFF  # 24 bits
         print(f"Voltaje diferencial: {voltage:.6f} V")
+        print(f"Datos crudo:")
 
-        time.sleep(0.2)
+        time.sleep(0.1)
 
 except KeyboardInterrupt:
     GPIO.cleanup()
