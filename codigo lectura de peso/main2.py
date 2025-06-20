@@ -12,11 +12,11 @@ try:
     print("Lectura diferencial de 4 pares (AIN0-AIN1, AIN2-AIN3, AIN4-AIN5, AIN6-AIN7)")
 
     while True:
-        ADC_Value = ADC.ADS1256_GetAll()
+        ADC_Value = ADC.ADS1256_GetAllChannal()
         for i in range(len(ADC_Value)):
             Voltage = ADC_Value[i] * 5.0 / 0x7FFFFF
             print(f"{i} ADC = {Voltage:.6f} V")
-        print("\33[4A")  # Retrocede 4 líneas para imprimir sobre las mismas
+        print("\33[4A")
 
 except KeyboardInterrupt:
     GPIO.cleanup()
