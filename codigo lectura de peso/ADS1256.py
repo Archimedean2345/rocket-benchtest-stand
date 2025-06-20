@@ -202,7 +202,7 @@ class ADS1256:
         return Value
         
     def ADS1256_GetAll(self):
-        if ScanMode == 0:
+    if ScanMode == 0:
         ADC_Value = [0] * 8
         for i in range(8):
             ADC_Value[i] = self.ADS1256_GetChannalValue(i)
