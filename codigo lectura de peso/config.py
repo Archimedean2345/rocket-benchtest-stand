@@ -1,3 +1,6 @@
+si hay un archivo config, deja te lo paso para modificar ese:
+
+es este;
 # /*****************************************************************************
 # * | File        :	  EPD_1in54.py
 # * | Author      :   Waveshare team
@@ -33,8 +36,8 @@ import RPi.GPIO as GPIO
 import time
 
 # Pin definition
-RST_PIN      = 8
-CS_PIN       = 27
+RST_PIN      = 18
+CS_PIN       = 22
 DRDY_PIN     = 17
 
 # SPI device, bus = 0, device = 0
@@ -44,7 +47,7 @@ def digital_write(pin, value):
     GPIO.output(pin, value)
 
 def digital_read(pin):
-    return GPIO.input(pin)
+    return GPIO.input(DRDY_PIN)
 
 def delay_ms(delaytime):
     time.sleep(delaytime // 1000.0)
@@ -63,7 +66,7 @@ def module_init():
     GPIO.setup(CS_PIN, GPIO.OUT)
     #GPIO.setup(DRDY_PIN, GPIO.IN)
     GPIO.setup(DRDY_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    SPI.max_speed_hz = 1000000
+    SPI.max_speed_hz = 20000
     SPI.mode = 0b01
     return 0;
 
