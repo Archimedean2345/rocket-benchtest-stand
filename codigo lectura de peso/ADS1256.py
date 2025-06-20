@@ -2,7 +2,7 @@ import config
 import RPi.GPIO as GPIO
 
 # modo de escaneo 0 (canales ind) y 1 (pares de canales)
-ScanMode = 1
+ScanMode = 0
 
 
 # gain channel (amp de señal)
@@ -147,6 +147,7 @@ class ADS1256:
             self.ADS1256_WriteReg(REG_E['REG_MUX'], (6 << 4) | 7) 	#DiffChannal   AIN6-AIN7
 
     def ADS1256_SetMode(self, Mode):
+        global ScanMode
         ScanMode = Mode
 
     def ADS1256_init(self):
@@ -159,7 +160,9 @@ class ADS1256:
         else:
             print("ID Read failed   ")
             return -1
-        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_8'], ADS1256_DRATE_E['ADS1256_60SPS'])
+        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_2'], 
+        ADS1256_DRATE_E['ADS1256_1000SPS'])
+        self.ADS1256_SetMode(1)  # Modo diferencial
         return 0
         
     def ADS1256_Read_ADC_Data(self):
@@ -199,8 +202,13 @@ class ADS1256:
         return Value
         
     def ADS1256_GetAll(self):
-        ADC_Value = [0,0,0,0,0,0,0,0]
-        for i in range(0,8,1):
+        if ScanMode == 0:
+        ADC_Value = [0] * 8
+        for i in range(8):
             ADC_Value[i] = self.ADS1256_GetChannalValue(i)
-        return ADC_Value
+    else:
+        ADC_Value = [0] * 4
+        for i in range(4):
+            ADC_Value[i] = self.ADS1256_GetChannalValue(i)
+    return ADC_Value
 ### END OF FILE ###
