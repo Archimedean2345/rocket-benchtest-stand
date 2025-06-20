@@ -159,7 +159,8 @@ class ADS1256:
         else:
             print("ID Read failed   ")
             return -1
-        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_16'], ADS1256_DRATE_E['ADS1256_100SPS'])
+        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_1'], ADS1256_DRATE_E['ADS1256_1000SPS'])
+        self.ADS1256_SetMode(1)   # <-- AQUI: modo diferencial por defecto
         return 0
         
     def ADS1256_Read_ADC_Data(self):
