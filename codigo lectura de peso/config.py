@@ -1,6 +1,3 @@
-si hay un archivo config, deja te lo paso para modificar ese:
-
-es este;
 # /*****************************************************************************
 # * | File        :	  EPD_1in54.py
 # * | Author      :   Waveshare team
