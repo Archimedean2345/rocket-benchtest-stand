@@ -7,10 +7,10 @@ import time
 import sys
 import termios
 import tty
-import select   # para detección no bloqueante de teclas
+import select
 
 # ==============================
-# CONFIGURACIÓN DE PINES / SPI
+# CONFIG PINES / SPI
 # ==============================
 RST_PIN  = 18
 CS_PIN   = 22
@@ -24,14 +24,14 @@ def digital_write(pin, value):
 def digital_read(pin):
     return GPIO.input(DRDY_PIN)
 
-def delay_ms(delaytime):
-    time.sleep(delaytime / 1000.0)
+def delay_ms(ms):
+    time.sleep(ms / 1000.0)
 
 def spi_writebyte(data):
     SPI.writebytes(data)
-    
-def spi_readbytes(reg):
-    return SPI.readbytes(reg)
+
+def spi_readbytes(n):
+    return SPI.readbytes(n)
 
 def module_init():
     GPIO.setmode(GPIO.BCM)
@@ -44,28 +44,12 @@ def module_init():
     return 0
 
 # ==============================
-# ADS1256 DRIVER
+# ADS1256
 # ==============================
-ADS1256_GAIN_E = {
-    'ADS1256_GAIN_64' : 6,
-}
-
-ADS1256_DRATE_E = {
-    'ADS1256_100SPS' : 0x82,  # 100 muestras/seg
-}
-
-REG_E = {
-    'REG_MUX'    : 1,
-    'REG_ADCON'  : 2,
-    'REG_DRATE'  : 3,
-}
-
-CMD = {
-    'CMD_WREG'  : 0x50,
-    'CMD_SYNC'  : 0xFC,
-    'CMD_WAKEUP': 0x00,
-    'CMD_RDATA' : 0x01,
-}
+ADS1256_GAIN_E = {'ADS1256_GAIN_64': 6}
+ADS1256_DRATE_E = {'ADS1256_100SPS': 0x82}
+REG_E = {'REG_STATUS':0, 'REG_MUX':1, 'REG_ADCON':2, 'REG_DRATE':3}
+CMD = {'CMD_WREG':0x50,'CMD_RREG':0x10,'CMD_SYNC':0xFC,'CMD_WAKEUP':0x00,'CMD_RDATA':0x01}
 
 class ADS1256:
     def __init__(self):
@@ -73,122 +57,138 @@ class ADS1256:
         self.cs_pin   = CS_PIN
         self.drdy_pin = DRDY_PIN
 
-    def ADS1256_reset(self):
-        digital_write(self.rst_pin, GPIO.HIGH)
-        delay_ms(200)
-        digital_write(self.rst_pin, GPIO.LOW)
-        delay_ms(200)
-        digital_write(self.rst_pin, GPIO.HIGH)
+    def reset(self):
+        digital_write(self.rst_pin, GPIO.HIGH); delay_ms(50)
+        digital_write(self.rst_pin, GPIO.LOW);  delay_ms(50)
+        digital_write(self.rst_pin, GPIO.HIGH); delay_ms(50)
 
-    def ADS1256_WriteCmd(self, reg):
-        digital_write(self.cs_pin, GPIO.LOW)
-        spi_writebyte([reg])
-        digital_write(self.cs_pin, GPIO.HIGH)
-
-    def ADS1256_WriteReg(self, reg, data):
+    def write_reg(self, reg, data):
         digital_write(self.cs_pin, GPIO.LOW)
         spi_writebyte([CMD['CMD_WREG'] | reg, 0x00, data])
         digital_write(self.cs_pin, GPIO.HIGH)
 
-    def ADS1256_WaitDRDY(self):
-        while(digital_read(self.drdy_pin) == 1):
+    def wait_drdy(self):
+        while digital_read(self.drdy_pin) == 1:
             pass
 
-    def ADS1256_ConfigADC(self, gain, drate):
-        self.ADS1256_WaitDRDY()
-        buf = [0, 0, 0, 0]
-        buf[0] = 0x01
-        buf[1] = 0x08
-        buf[2] = gain
-        buf[3] = drate
+    def config(self, gain, drate):
+        self.wait_drdy()
+        # STATUS(0x01), MUX(0x08 por defecto), ADCON(gain), DRATE
         digital_write(self.cs_pin, GPIO.LOW)
         spi_writebyte([CMD['CMD_WREG'] | 0, 0x03])
-        spi_writebyte(buf)
+        spi_writebyte([0x01, 0x08, gain, drate])
         digital_write(self.cs_pin, GPIO.HIGH)
         delay_ms(1)
 
-    def ADS1256_SetDiffChannal(self, Channal):
-        # Canal diferencial fijo: AIN0-AIN1
-        if Channal == 0:
-            self.ADS1256_WriteReg(REG_E['REG_MUX'], (0 << 4) | 1)
+    def set_diff_ch(self, ch=0):
+        # ch=0 => AIN0 (P) - AIN1 (N)
+        if ch == 0:
+            self.write_reg(REG_E['REG_MUX'], (0 << 4) | 1)
 
-    def ADS1256_init(self):
-        if (module_init() != 0):
+    def init(self):
+        if module_init() != 0:
             return -1
-        self.ADS1256_reset()
-        self.ADS1256_ConfigADC(ADS1256_GAIN_E['ADS1256_GAIN_64'],
-                               ADS1256_DRATE_E['ADS1256_100SPS'])
+        self.reset()
+        self.config(ADS1256_GAIN_E['ADS1256_GAIN_64'], ADS1256_DRATE_E['ADS1256_100SPS'])
         return 0
 
-    def ADS1256_Read_ADC_Data(self):
-        self.ADS1256_WaitDRDY()
+    def read_data(self):
+        self.wait_drdy()
         digital_write(self.cs_pin, GPIO.LOW)
         spi_writebyte([CMD['CMD_RDATA']])
-        buf = spi_readbytes(3)
+        b = spi_readbytes(3)
         digital_write(self.cs_pin, GPIO.HIGH)
-        read = (buf[0] << 16) | (buf[1] << 8) | buf[2]
-        if (read & 0x800000):  # signed 24-bit
-            read -= 0x1000000
-        return read
+        raw = (b[0] << 16) | (b[1] << 8) | b[2]
+        if raw & 0x800000:  # signed 24-bit
+            raw -= 0x1000000
+        return raw
 
 # ==============================
-# FUNCIONES DE ENTRADA (tecla 't')
+# Teclado sin ENTER
 # ==============================
+def set_cbreak():
+    fd = sys.stdin.fileno()
+    st = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+    return fd, st
+
+def restore_term(fd, st):
+    termios.tcsetattr(fd, termios.TCSADRAIN, st)
+
 def kbhit():
-    """Devuelve True si hay una tecla lista para leer"""
-    dr, dw, de = select.select([sys.stdin], [], [], 0)
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
     return dr != []
 
 def getch():
-    """Lee una tecla sin necesidad de Enter"""
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return ch
+    return sys.stdin.read(1)
 
 # ==============================
-# MAIN LOOP
+# MAIN
 # ==============================
-VREF = 5.0        # Referencia ADC
-FS_N = 2943       # 300 kg ≈ 2943 N
-FS_mV = 9.0       # 1 mV/V * 9 V = 9 mV salida máxima
+VREF = 5.0       # Referencia que usa la placa (jumper en 5V)
+FS_mV = 9.0      # 1 mV/V * 9V = 9 mV a carga máxima
+FS_N  = 2943     # 300 kg ≈ 2943 N
+CODE_FS = 0x7fffff  # + full scale code
+
+def code_to_mV(delta_code):
+    # Convierte delta de código a mV
+    return (delta_code * VREF / CODE_FS) * 1000.0
 
 try:
-    ADC = ADS1256()
-    ADC.ADS1256_init()
+    adc = ADS1256()
+    adc.init()
+    adc.set_diff_ch(0)  # AIN0 - AIN1 (S+ en AD0, S- en AD1)
 
-    # === TARE INICIAL ===
-    ADC.ADS1256_SetDiffChannal(0)
-    raw_zero = ADC.ADS1256_Read_ADC_Data()
-    offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
-    print("Tare inicial aplicado: %.3f mV (raw=%d)\n" % (offset_mV, raw_zero))
-    print("Presiona 't' en cualquier momento para recalibrar (tare)\n")
+    # --- TARE en crudo: promedio para un cero estable ---
+    N_TARE = 20
+    acc = 0
+    for _ in range(N_TARE):
+        acc += adc.read_data()
+        time.sleep(0.005)
+    raw_zero = acc // N_TARE
+
+    # Polaridad: si al comprimir ves N negativos, pon -1 o pulsa 'p'
+    sign_dir = +1  # +1 = AIN0-AIN1 positivo es compresión; -1 invierte
+
+    # Teclado sin ENTER
+    fd, old = set_cbreak()
+
+    print("Tare inicial (raw) = %d" % raw_zero)
+    print("Teclas:  t = tare | p = invertir polaridad | q = salir\n")
 
     while True:
-        ADC.ADS1256_SetDiffChannal(0)
-        raw = ADC.ADS1256_Read_ADC_Data()
-        voltage = -(raw * VREF / 0x7fffff) * 1000
-        # Restar offset
-        voltage -= offset_mV
-        # Compresión positiva
-        fuerza = (voltage / FS_mV) * FS_N
+        adc.set_diff_ch(0)
+        raw = adc.read_data()
+        raw_delta = raw - raw_zero          # Tare en crudo
+        mv = sign_dir * code_to_mV(raw_delta)
+        forceN = (mv / FS_mV) * FS_N
 
-        print("Raw = %d   Voltaje = %.3f mV   Fuerza = %.2f N" % (raw, voltage, fuerza))
+        print("Raw=%7d  Δraw=%7d  Voltaje=%8.3f mV  Fuerza=%9.2f N  (pol=%+d)"
+              % (raw, raw_delta, mv, forceN, sign_dir))
         time.sleep(0.01)  # ~100 SPS
 
-        # Detección de tecla 't'
         if kbhit():
-            ch = getch()
-            if ch.lower() == 't':
-                raw_zero = ADC.ADS1256_Read_ADC_Data()
-                offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
-                print("\n>>> Nuevo tare aplicado: %.3f mV (raw=%d)\n" % (offset_mV, raw_zero))
+            ch = getch().lower()
+            if ch == 't':
+                # nuevo tare (promedio rápido)
+                acc = 0
+                for _ in range(N_TARE):
+                    acc += adc.read_data()
+                    time.sleep(0.005)
+                raw_zero = acc // N_TARE
+                print("\n>>> Nuevo tare aplicado. raw_zero = %d\n" % raw_zero)
+            elif ch == 'p':
+                sign_dir *= -1
+                print("\n>>> Polaridad invertida. (pol=%+d)\n" % sign_dir)
+            elif ch == 'q':
+                break
 
 except KeyboardInterrupt:
+    pass
+finally:
+    try:
+        restore_term(fd, old)
+    except Exception:
+        pass
     GPIO.cleanup()
-    print("\r\nPrograma terminado")
-    exit()
+    print("\nPrograma terminado.")
