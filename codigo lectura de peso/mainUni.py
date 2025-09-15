@@ -148,7 +148,7 @@ def getch():
 # MAIN LOOP
 # ==============================
 VREF = 5.0        # Referencia ADC
-FS_N = 2943       # 300 kg ≈ 2943 N
+FS_N = 0       # 300kg max. por cada 1kg=  cada 5kg=  cada 20kg= 
 FS_mV = 9.0       # 1 mV/V * 9 V = 9 mV salida máxima
 
 try:
@@ -171,7 +171,7 @@ try:
         # Invertir signo para que compresión sea positiva
         fuerza = - (voltage / FS_mV) * FS_N
 
-        print("Celda = %.3f mV   (%.2f N)" % (voltage, fuerza))
+        print("Raw = %d Voltaje = %.3f mV (%.2f N)" % (raw, voltage, fuerza))
         time.sleep(0.01)  # ~100 SPS
 
         # Detección de tecla 't'
