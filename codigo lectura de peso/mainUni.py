@@ -7,7 +7,7 @@ import time
 import sys
 import termios
 import tty
-import select   # 👈 para detección no bloqueante de teclas
+import select   # para detección no bloqueante de teclas
 
 # ==============================
 # CONFIGURACIÓN DE PINES / SPI
@@ -132,13 +132,19 @@ class ADS1256:
         return read
 
 # ==============================
-# FUNCIONES DE ENTRADA (para tecla 't')
+# FUNCIONES DE ENTRADA (tecla 't')
 # ==============================
+def kbhit():
+    """Devuelve True si hay una tecla lista para leer"""
+    dr, dw, de = select.select([sys.stdin], [], [], 0)
+    return dr != []
+
 def getch():
+    """Lee una tecla sin necesidad de Enter"""
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
-        tty.setraw(fd)
+        tty.setcbreak(fd)
         ch = sys.stdin.read(1)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -148,7 +154,7 @@ def getch():
 # MAIN LOOP
 # ==============================
 VREF = 5.0        # Referencia ADC
-FS_N = 0       # 300kg max. por cada 1kg=  cada 5kg=  cada 20kg= 
+FS_N = 2943       # 300 kg ≈ 2943 N
 FS_mV = 9.0       # 1 mV/V * 9 V = 9 mV salida máxima
 
 try:
@@ -159,7 +165,7 @@ try:
     ADC.ADS1256_SetDiffChannal(0)
     raw_zero = ADC.ADS1256_Read_ADC_Data()
     offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
-    print("Tare inicial aplicado: %.3f mV\n" % offset_mV)
+    print("Tare inicial aplicado: %.3f mV (raw=%d)\n" % (offset_mV, raw_zero))
     print("Presiona 't' en cualquier momento para recalibrar (tare)\n")
 
     while True:
@@ -168,19 +174,19 @@ try:
         voltage = (raw * VREF / 0x7fffff) * 1000
         # Restar offset
         voltage -= offset_mV
-        # Invertir signo para que compresión sea positiva
-        fuerza = - (voltage / FS_mV) * FS_N
+        # Compresión positiva
+        fuerza = (voltage / FS_mV) * FS_N
 
-        print("Raw = %d Voltaje = %.3f mV (%.2f N)" % (raw, voltage, fuerza))
+        print("Raw = %d   Voltaje = %.3f mV   Fuerza = %.2f N" % (raw, voltage, fuerza))
         time.sleep(0.01)  # ~100 SPS
 
         # Detección de tecla 't'
-        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        if kbhit():
             ch = getch()
             if ch.lower() == 't':
                 raw_zero = ADC.ADS1256_Read_ADC_Data()
                 offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
-                print("\nNuevo tare aplicado: %.3f mV\n" % offset_mV)
+                print("\n>>> Nuevo tare aplicado: %.3f mV (raw=%d)\n" % (offset_mV, raw_zero))
 
 except KeyboardInterrupt:
     GPIO.cleanup()
