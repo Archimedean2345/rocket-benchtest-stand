@@ -4,6 +4,9 @@
 import spidev
 import RPi.GPIO as GPIO
 import time
+import sys
+import termios
+import tty
 
 # ==============================
 # CONFIGURACIÓN DE PINES / SPI
@@ -43,21 +46,14 @@ def module_init():
 # ADS1256 DRIVER
 # ==============================
 ADS1256_GAIN_E = {
-    'ADS1256_GAIN_1'  : 0,
-    'ADS1256_GAIN_2'  : 1,
-    'ADS1256_GAIN_4'  : 2,
-    'ADS1256_GAIN_8'  : 3,
-    'ADS1256_GAIN_16' : 4,
-    'ADS1256_GAIN_32' : 5,
     'ADS1256_GAIN_64' : 6,
 }
 
 ADS1256_DRATE_E = {
-    'ADS1256_100SPS' : 0x82,  # Elegido: 100 SPS
+    'ADS1256_100SPS' : 0x82,  # 100 muestras/seg
 }
 
 REG_E = {
-    'REG_STATUS' : 0,
     'REG_MUX'    : 1,
     'REG_ADCON'  : 2,
     'REG_DRATE'  : 3,
@@ -65,7 +61,6 @@ REG_E = {
 
 CMD = {
     'CMD_WREG'  : 0x50,
-    'CMD_RREG'  : 0x10,
     'CMD_SYNC'  : 0xFC,
     'CMD_WAKEUP': 0x00,
     'CMD_RDATA' : 0x01,
@@ -101,10 +96,10 @@ class ADS1256:
     def ADS1256_ConfigADC(self, gain, drate):
         self.ADS1256_WaitDRDY()
         buf = [0, 0, 0, 0]
-        buf[0] = 0x01  # STATUS
-        buf[1] = 0x08  # MUX default
-        buf[2] = gain  # ADCON: PGA gain
-        buf[3] = drate # DRATE: sample rate
+        buf[0] = 0x01
+        buf[1] = 0x08
+        buf[2] = gain
+        buf[3] = drate
         digital_write(self.cs_pin, GPIO.LOW)
         spi_writebyte([CMD['CMD_WREG'] | 0, 0x03])
         spi_writebyte(buf)
@@ -112,7 +107,7 @@ class ADS1256:
         delay_ms(1)
 
     def ADS1256_SetDiffChannal(self, Channal):
-        # Solo implementamos AIN0-AIN1 (diferencial)
+        # Canal diferencial fijo: AIN0-AIN1
         if Channal == 0:
             self.ADS1256_WriteReg(REG_E['REG_MUX'], (0 << 4) | 1)
 
@@ -136,28 +131,55 @@ class ADS1256:
         return read
 
 # ==============================
+# FUNCIONES DE ENTRADA (para tecla 't')
+# ==============================
+def getch():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
+# ==============================
 # MAIN LOOP
 # ==============================
-# Parámetros de la celda de carga
-VREF = 5.0        # Referencia del ADC
+VREF = 5.0        # Referencia ADC
 FS_N = 2943       # 300 kg ≈ 2943 N
-FS_mV = 9.0       # 1 mV/V * 9 V excitación
+FS_mV = 9.0       # 1 mV/V * 9 V = 9 mV salida máxima
 
 try:
     ADC = ADS1256()
     ADC.ADS1256_init()
 
-    while True:
-        ADC.ADS1256_SetDiffChannal(0)  # Canal diferencial AIN0-AIN1
-        raw = ADC.ADS1256_Read_ADC_Data()
+    # === TARE INICIAL ===
+    ADC.ADS1256_SetDiffChannal(0)
+    raw_zero = ADC.ADS1256_Read_ADC_Data()
+    offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
+    print("Tare inicial: %.3f mV" % offset_mV)
 
-        # Convertir a mV
+    while True:
+        ADC.ADS1256_SetDiffChannal(0)
+        raw = ADC.ADS1256_Read_ADC_Data()
         voltage = (raw * VREF / 0x7fffff) * 1000
-        # Convertir a Newtons
-        fuerza = (voltage / FS_mV) * FS_N
+        # Restar offset
+        voltage -= offset_mV
+        # Invertir signo para que compresión sea positiva
+        fuerza = - (voltage / FS_mV) * FS_N
 
         print("Celda = %.3f mV   (%.2f N)" % (voltage, fuerza))
         time.sleep(0.01)  # ~100 SPS
+
+        # Detectar tecla presionada
+        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+            ch = getch()
+            if ch.lower() == 't':
+                # recalibrar (tare en caliente)
+                raw_zero = ADC.ADS1256_Read_ADC_Data()
+                offset_mV = (raw_zero * VREF / 0x7fffff) * 1000
+                print("Nuevo tare aplicado: %.3f mV" % offset_mV)
 
 except KeyboardInterrupt:
     GPIO.cleanup()
