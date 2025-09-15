@@ -171,7 +171,7 @@ try:
     while True:
         ADC.ADS1256_SetDiffChannal(0)
         raw = ADC.ADS1256_Read_ADC_Data()
-        voltage = (raw * VREF / 0x7fffff) * 1000
+        voltage = -(raw * VREF / 0x7fffff) * 1000
         # Restar offset
         voltage -= offset_mV
         # Compresión positiva
