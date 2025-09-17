@@ -126,8 +126,8 @@ def getch():
 # MAIN
 # ==============================
 VREF = 5.0       # Referencia que usa la placa (jumper en 5V)
-FS_mV = 9.0      # 1 mV/V * 9V = 9 mV a carga máxima
-FS_N  = 2943     # 300 kg ≈ 2943 N
+FS_mV = 5.0      # 1 mV/V * 9V = 9 mV a carga máxima
+FS_N  = 0     # 300 kg ≈ 2943 N
 CODE_FS = 0x7fffff  # + full scale code
 
 def code_to_mV(delta_code):
