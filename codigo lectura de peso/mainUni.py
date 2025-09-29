@@ -70,9 +70,9 @@ def getch(): return sys.stdin.read(1)
 # MAIN
 # ==============================
 VREF = 5.0      # Jumper en 5V
-GAIN = 16       # GAIN inicial (puedes cambiar a 64 con tecla 'g')
+GAIN = 1       # GAIN inicial (puedes cambiar a 64 con tecla 'g')
 CODE_FS = 0x7fffff
-FS_mV = 9.0
+FS_mV = 4.5     # Esta es la pendiente para calibrar la celda 
 FS_N  = 2943
 
 def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
@@ -88,8 +88,8 @@ try:
         adc.set_diff_ch(); raw=adc.read_data()
         delta=raw-raw_zero
         mv=code_to_mV(delta, GAIN)
-        force=(mv/FS_mV)*FS_N
-        print("GAIN=%2d  Raw=%7d Δ=%7d  Voltaje=%8.3f mV  Fuerza=%9.2f N"%(GAIN,raw,delta,mv,force))
+        force_kgf=(mv*FS_mV)
+        print("GAIN=%2d  Raw=%7d Δ=%7d  Voltaje=%8.3f mV  Fuerza=%9.2f N"%(GAIN,raw,delta,mv,force_kgf))
         time.sleep(0.01)
 
         if kbhit():
