@@ -26,7 +26,12 @@ def module_init():
 # ADS1256
 # ==============================
 ADS1256_GAIN_E = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6}
-ADS1256_DRATE_E = {'100SPS':0x82}
+ADS1256_DRATE_E = {
+    30: 0x82,   # aprox 30 SPS
+    60: 0x72,   # aprox 60 SPS
+    100: 0x82,  # 100 SPS
+    500: 0x92   # 500 SPS
+}
 REG_E = {'REG_MUX':1,'REG_ADCON':2,'REG_DRATE':3}
 CMD = {'CMD_WREG':0x50,'CMD_RDATA':0x01}
 
@@ -40,16 +45,16 @@ class ADS1256:
         digital_write(self.cs_pin,0); spi_writebyte([CMD['CMD_WREG']|reg,0,data]); digital_write(self.cs_pin,1)
     def wait_drdy(self): 
         while digital_read(self.drdy_pin)==1: pass
-    def config(self, gain, drate):
+    def config(self, gain, drate_code):
         self.wait_drdy()
         digital_write(self.cs_pin,0)
         spi_writebyte([CMD['CMD_WREG']|0,0x03])
-        spi_writebyte([0x01,0x08,ADS1256_GAIN_E[gain],drate])
+        spi_writebyte([0x01,0x08,ADS1256_GAIN_E[gain],drate_code])
         digital_write(self.cs_pin,1); delay_ms(1)
     def set_diff_ch(self): self.write_reg(REG_E['REG_MUX'], (0<<4)|1) # AIN0-AIN1
-    def init(self, gain):
+    def init(self, gain, drate_code):
         if module_init()!=0: return -1
-        self.reset(); self.config(gain, ADS1256_DRATE_E['100SPS']); return 0
+        self.reset(); self.config(gain, drate_code); return 0
     def read_data(self):
         self.wait_drdy(); digital_write(self.cs_pin,0)
         spi_writebyte([CMD['CMD_RDATA']]); b=spi_readbytes(3); digital_write(self.cs_pin,1)
@@ -71,8 +76,11 @@ def getch(): return sys.stdin.read(1)
 # ==============================
 VREF = 5.0
 GAIN = 16     # inicial
+SPS = 100     # muestras por segundo inicial
 CODE_FS = 0x7fffff
 FS_mV = 3.9711563   # calibración
+AVAILABLE_GAINS = [4, 8, 16, 64]
+AVAILABLE_SPS = [30, 60, 100, 500]
 
 def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
 
@@ -80,19 +88,16 @@ def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
 # MAIN
 # ==============================
 try:
-    # Tiempo de muestreo
     duracion = int(input("⏱️ ¿Cuánto tiempo quieres muestrear (segundos)? "))
 
-    adc=ADS1256(); adc.init(GAIN); adc.set_diff_ch()
-    # Tare inicial
+    adc=ADS1256(); adc.init(GAIN, ADS1256_DRATE_E[SPS]); adc.set_diff_ch()
     N=20; raw_zero=sum(adc.read_data() for _ in range(N))//N
     fd,old=set_cbreak()
-    print("Tare inicial raw=%d\nPresiona: t=tare | g=toggle gain | q=salir\n"%raw_zero)
+    print("Tare inicial raw=%d\nPresiona: t=tare | g=ganancia | s=sampling | q=salir\n"%raw_zero)
 
-    # Abrir CSV
     with open("thrust-curve.csv", "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_N"])
+        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_N","GAIN","SPS"])
 
         start=time.time()
         while (time.time()-start)<duracion:
@@ -102,24 +107,27 @@ try:
             masa=(mv*FS_mV)
             t=time.time()-start
 
-            # Guardar CSV
-            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{masa:.6f}"])
+            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{masa:.6f}", GAIN, SPS])
 
-            # Mostrar consola
-            print("t=%6.2fs GAIN=%2d Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f kgf"%
-                  (t,GAIN,raw,delta,mv,masa))
-            time.sleep(0.01) # ~100 Hz
+            print("t=%6.2fs GAIN=%2d SPS=%3d Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f kgf"%(
+                t, GAIN, SPS, raw, delta, mv, masa))
+            time.sleep(1.0/SPS)
 
-            # Teclas
             if kbhit():
                 ch=getch().lower()
                 if ch=='t':
                     raw_zero=sum(adc.read_data() for _ in range(N))//N
                     print("\n>>> Nuevo tare raw=%d\n"%raw_zero)
                 elif ch=='g':
-                    GAIN = 64 if GAIN==16 else 16
-                    adc.config(GAIN, ADS1256_DRATE_E['100SPS'])
+                    idx = AVAILABLE_GAINS.index(GAIN)
+                    GAIN = AVAILABLE_GAINS[(idx+1) % len(AVAILABLE_GAINS)]
+                    adc.config(GAIN, ADS1256_DRATE_E[SPS])
                     print("\n>>> GAIN cambiado a %d\n"%GAIN)
+                elif ch=='s':
+                    idx = AVAILABLE_SPS.index(SPS)
+                    SPS = AVAILABLE_SPS[(idx+1) % len(AVAILABLE_SPS)]
+                    adc.config(GAIN, ADS1256_DRATE_E[SPS])
+                    print("\n>>> SPS cambiado a %d\n"%SPS)
                 elif ch=='q':
                     print("\n>>> Muestreo terminado por usuario\n")
                     break
