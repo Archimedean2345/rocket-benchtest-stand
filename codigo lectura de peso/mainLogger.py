@@ -72,7 +72,7 @@ def getch(): return sys.stdin.read(1)
 VREF = 5.0
 GAIN = 16     # inicial
 CODE_FS = 0x7fffff
-FS_mV = 0.154094758   # calibración
+FS_mV = 3.9711563   # calibración
 
 def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
 
