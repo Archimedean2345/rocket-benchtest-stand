@@ -75,7 +75,7 @@ VREF = 5.0
 GAIN = 16
 DRATE = '100SPS'
 CODE_FS = 0x7fffff
-FS_mV = 3.9711563   # calibración
+FS_mV = 0.30882353   # calibración
 
 # Filtro EMA adaptativo
 def calc_alpha(sps, tau=0.03):   # tau=30 ms
@@ -108,7 +108,7 @@ try:
 
     with open("thrust-curve.csv", "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_N","GAIN","SPS"])
+        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_kgf","GAIN","SPS"])
 
         start=time.time()
         while (time.time()-start)<duracion:
@@ -125,7 +125,7 @@ try:
             t=time.time()-start
 
             writer.writerow([f"{t:.3f}", raw, delta, f"{ema_val:.6f}", f"{fuerza:.6f}", GAIN, DRATE])
-            print("t=%6.2fs GAIN=%2d SPS=%6s Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f N"%
+            print("t=%6.2fs GAIN=%2d SPS=%6s Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f kgf"%
                   (t,GAIN,DRATE,raw,delta,ema_val,fuerza))
             time.sleep(0.01)
 
