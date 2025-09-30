@@ -3,10 +3,10 @@
 
 import csv, time
 import RPi.GPIO as GPIO
-from mainUni import ADS1256, code_to_mV, VREF, CODE_FS, FS_mV, FS_N, ADS1256_DRATE_E, GAIN
+from mainUni import ADS1256, code_to_mV, FS_mV, FS_N, GAIN
 
 def main():
-    # Preguntar duración y nombre de archivo
+    # Preguntar al usuario
     duracion = int(input("⏱️ ¿Cuánto tiempo quieres loggear (segundos)? "))
     nombre_archivo = input("📂 Nombre del archivo CSV (sin extensión): ").strip() + ".csv"
 
@@ -23,7 +23,7 @@ def main():
     raw_zero = sum(adc.read_data() for _ in range(N)) // N
     print(f"Tare inicial raw={raw_zero}\n")
 
-    # Abrir CSV
+    # Abrir archivo CSV
     with open(nombre_archivo, mode="w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["tiempo_s", "raw", "delta", "voltaje_mV", "fuerza_N"])
@@ -36,7 +36,7 @@ def main():
             fuerza = (mv / FS_mV) * FS_N
             t = time.time() - start
 
-            writer.writerow([t, raw, delta, mv, fuerza])
+            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{fuerza:.6f}"])
             print(f"t={t:6.2f}s Raw={raw:7d} Δ={delta:7d} "
                   f"Voltaje={mv:8.3f} mV Fuerza={fuerza:9.2f} N")
 
