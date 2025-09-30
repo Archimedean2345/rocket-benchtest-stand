@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 
 import spidev, RPi.GPIO as GPIO, time, sys, termios, tty, select, csv
+from collections import deque
 
 # ==============================
 # CONFIGURACIÓN DE PINES / SPI
@@ -26,12 +27,7 @@ def module_init():
 # ADS1256
 # ==============================
 ADS1256_GAIN_E = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6}
-ADS1256_DRATE_E = {
-    30: 0x82,   # aprox 30 SPS
-    60: 0x72,   # aprox 60 SPS
-    100: 0x82,  # 100 SPS
-    500: 0x92   # 500 SPS
-}
+ADS1256_DRATE_E = {'30SPS':0xF0, '60SPS':0x86, '100SPS':0x82, '500SPS':0x72}
 REG_E = {'REG_MUX':1,'REG_ADCON':2,'REG_DRATE':3}
 CMD = {'CMD_WREG':0x50,'CMD_RDATA':0x01}
 
@@ -45,16 +41,16 @@ class ADS1256:
         digital_write(self.cs_pin,0); spi_writebyte([CMD['CMD_WREG']|reg,0,data]); digital_write(self.cs_pin,1)
     def wait_drdy(self): 
         while digital_read(self.drdy_pin)==1: pass
-    def config(self, gain, drate_code):
+    def config(self, gain, drate):
         self.wait_drdy()
         digital_write(self.cs_pin,0)
         spi_writebyte([CMD['CMD_WREG']|0,0x03])
-        spi_writebyte([0x01,0x08,ADS1256_GAIN_E[gain],drate_code])
+        spi_writebyte([0x01,0x08,ADS1256_GAIN_E[gain],drate])
         digital_write(self.cs_pin,1); delay_ms(1)
     def set_diff_ch(self): self.write_reg(REG_E['REG_MUX'], (0<<4)|1) # AIN0-AIN1
-    def init(self, gain, drate_code):
+    def init(self, gain, drate):
         if module_init()!=0: return -1
-        self.reset(); self.config(gain, drate_code); return 0
+        self.reset(); self.config(gain, drate); return 0
     def read_data(self):
         self.wait_drdy(); digital_write(self.cs_pin,0)
         spi_writebyte([CMD['CMD_RDATA']]); b=spi_readbytes(3); digital_write(self.cs_pin,1)
@@ -75,14 +71,49 @@ def getch(): return sys.stdin.read(1)
 # MAIN CONFIG
 # ==============================
 VREF = 5.0
-GAIN = 16     # inicial
-SPS = 100     # muestras por segundo inicial
+GAIN = 16
+SPS = '100SPS'
 CODE_FS = 0x7fffff
 FS_mV = 3.9711563   # calibración
-AVAILABLE_GAINS = [4, 8, 16, 64]
-AVAILABLE_SPS = [30, 60, 100, 500]
 
 def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
+
+# ==============================
+# FILTROS
+# ==============================
+FILTERS = ["OFF", "MEDIAN", "EMA", "MEDIAN+EMA", "MA"]
+filter_mode_idx = 2  # por defecto EMA
+alpha = 0.2          # EMA factor
+ma_window = 10       # ventana MA
+
+median_buf = deque(maxlen=5)
+ma_buf = deque(maxlen=ma_window)
+ema_state = None
+
+def median5(x):
+    median_buf.append(x)
+    return sorted(median_buf)[len(median_buf)//2]
+
+def ema(x):
+    global ema_state
+    if ema_state is None:
+        ema_state = x
+    else:
+        ema_state = alpha * x + (1.0 - alpha) * ema_state
+    return ema_state
+
+def ma(x):
+    ma_buf.append(x)
+    return sum(ma_buf) / len(ma_buf)
+
+def apply_filter(x):
+    mode = FILTERS[filter_mode_idx]
+    if mode == "OFF": return x
+    elif mode == "MEDIAN": return median5(x)
+    elif mode == "EMA": return ema(x)
+    elif mode == "MEDIAN+EMA": return ema(median5(x))
+    elif mode == "MA": return ma(x)
+    return x
 
 # ==============================
 # MAIN
@@ -91,13 +122,15 @@ try:
     duracion = int(input("⏱️ ¿Cuánto tiempo quieres muestrear (segundos)? "))
 
     adc=ADS1256(); adc.init(GAIN, ADS1256_DRATE_E[SPS]); adc.set_diff_ch()
+    # Tare inicial
     N=20; raw_zero=sum(adc.read_data() for _ in range(N))//N
     fd,old=set_cbreak()
-    print("Tare inicial raw=%d\nPresiona: t=tare | g=ganancia | s=sampling | q=salir\n"%raw_zero)
+    print("Tare inicial raw=%d\nPresiona: t=tare | g=ganancia | s=SPS | f=filtro | q=salir\n"%raw_zero)
 
     with open("thrust-curve.csv", "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_N","GAIN","SPS"])
+        writer.writerow(["tiempo_s","raw","delta","voltaje_mV","fuerza_N","GAIN","SPS",
+                         "voltaje_filt_mV","fuerza_filt_N"])
 
         start=time.time()
         while (time.time()-start)<duracion:
@@ -107,11 +140,16 @@ try:
             masa=(mv*FS_mV)
             t=time.time()-start
 
-            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{masa:.6f}", GAIN, SPS])
+            mv_filt = apply_filter(mv)
+            masa_filt = (mv_filt * FS_mV)
 
-            print("t=%6.2fs GAIN=%2d SPS=%3d Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f kgf"%(
-                t, GAIN, SPS, raw, delta, mv, masa))
-            time.sleep(1.0/SPS)
+            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{masa:.6f}",
+                             GAIN, SPS, f"{mv_filt:.6f}", f"{masa_filt:.6f}"])
+
+            print("t=%6.2fs GAIN=%2d SPS=%3s Raw=%7d Δ=%7d V=%8.3f mV F=%8.3f kgf | Vf=%8.3f Ff=%8.3f [%s]" % (
+                t, GAIN, SPS, raw, delta, mv, masa, mv_filt, masa_filt, FILTERS[filter_mode_idx]))
+
+            time.sleep(0.01)
 
             if kbhit():
                 ch=getch().lower()
@@ -119,18 +157,33 @@ try:
                     raw_zero=sum(adc.read_data() for _ in range(N))//N
                     print("\n>>> Nuevo tare raw=%d\n"%raw_zero)
                 elif ch=='g':
-                    idx = AVAILABLE_GAINS.index(GAIN)
-                    GAIN = AVAILABLE_GAINS[(idx+1) % len(AVAILABLE_GAINS)]
+                    next_gains=[4,8,16,64]
+                    GAIN=next_gains[(next_gains.index(GAIN)+1)%len(next_gains)]
                     adc.config(GAIN, ADS1256_DRATE_E[SPS])
                     print("\n>>> GAIN cambiado a %d\n"%GAIN)
                 elif ch=='s':
-                    idx = AVAILABLE_SPS.index(SPS)
-                    SPS = AVAILABLE_SPS[(idx+1) % len(AVAILABLE_SPS)]
+                    next_sps=['30SPS','60SPS','100SPS','500SPS']
+                    SPS=next_sps[(next_sps.index(SPS)+1)%len(next_sps)]
                     adc.config(GAIN, ADS1256_DRATE_E[SPS])
-                    print("\n>>> SPS cambiado a %d\n"%SPS)
+                    print("\n>>> SPS cambiado a %s\n"%SPS)
+                elif ch=='f':
+                    filter_mode_idx=(filter_mode_idx+1)%len(FILTERS)
+                    ema_state=None
+                    print("\n>>> Filtro: %s (alpha=%.2f, MAwin=%d)\n"%(FILTERS[filter_mode_idx],alpha,ma_window))
+                elif ch=='+':
+                    alpha=min(0.95,alpha+0.05)
+                    print("\n>>> EMA alpha=%.2f\n"%alpha)
+                elif ch=='-':
+                    alpha=max(0.05,alpha-0.05)
+                    print("\n>>> EMA alpha=%.2f\n"%alpha)
+                elif ch=='h':
+                    ma_window=min(500,ma_window+5); ma_buf=deque(ma_buf,maxlen=ma_window)
+                    print("\n>>> MA window=%d\n"%ma_window)
+                elif ch=='j':
+                    ma_window=max(3,ma_window-5); ma_buf=deque(ma_buf,maxlen=ma_window)
+                    print("\n>>> MA window=%d\n"%ma_window)
                 elif ch=='q':
-                    print("\n>>> Muestreo terminado por usuario\n")
-                    break
+                    print("\n>>> Muestreo terminado por usuario\n"); break
 
     print("\n✅ Muestreo terminado. Datos guardados en thrust-curve.csv")
 
