@@ -75,7 +75,7 @@ VREF = 5.0
 GAIN = 16
 DRATE = '100SPS'
 CODE_FS = 0x7fffff
-FS_mV = 0.30882353   # calibración
+FS_mV = 18.75   # calibración
 
 # Filtro EMA adaptativo
 def calc_alpha(sps, tau=0.03):   # tau=30 ms
