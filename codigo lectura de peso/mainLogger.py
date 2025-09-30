@@ -2,58 +2,48 @@
 # -*- coding:utf-8 -*-
 
 import csv, time
-import matplotlib.pyplot as plt
+from mainUni import ADS1256, code_to_mV, VREF, CODE_FS, FS_mV, FS_N, ADS1256_DRATE_E, GAIN
 
-# Importamos directamente del mainUni
-import mainUni
+# ==============================
+# Logger de datos
+# ==============================
+def main():
+    # Preguntar al usuario
+    duracion = int(input("⏱️ ¿Cuánto tiempo quieres loggear (segundos)? "))
+    nombre_archivo = input("📂 Nombre del archivo CSV (sin extensión): ").strip() + ".csv"
 
-def adquirir_datos(duracion=10, filename="mediciones.csv"):
-    adc = mainUni.ADS1256()
-    adc.init(mainUni.GAIN)
-    adc.set_diff_ch()
+    print(f"\n>>> Loggeando durante {duracion} segundos...")
+    print(f">>> Los datos se guardarán en {nombre_archivo}\n")
+
+    # Inicializar ADC
+    adc = ADS1256(); adc.init(GAIN); adc.set_diff_ch()
 
     # Tare inicial
     N = 20
     raw_zero = sum(adc.read_data() for _ in range(N)) // N
-    print(f"Tare inicial raw={raw_zero}")
+    print(f"Tare inicial raw={raw_zero}\n")
 
-    tiempos, raws, voltajes, fuerzas = [], [], [], []
-
-    t0 = time.time()
-    with open(filename, "w", newline="") as f:
+    # Abrir CSV
+    with open(nombre_archivo, mode="w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Tiempo (s)", "Raw", "mV", "Fuerza (N)"])
-        while time.time() - t0 < duracion:
+        writer.writerow(["timestamp", "raw", "delta", "voltaje_mV", "fuerza_N"])
+
+        start = time.time()
+        while (time.time() - start) < duracion:
             raw = adc.read_data()
             delta = raw - raw_zero
-            mv = mainUni.code_to_mV(delta, mainUni.GAIN)
-            fuerza = (mv / mainUni.FS_mV) * mainUni.FS_N
-            t = time.time() - t0
+            mv = code_to_mV(delta, GAIN)
+            fuerza = mv * FS_mV  # N
 
-            writer.writerow([t, raw, mv, fuerza])
-            tiempos.append(t); raws.append(raw); voltajes.append(mv); fuerzas.append(fuerza)
+            # Guardar en CSV
+            writer.writerow([time.time() - start, raw, delta, mv, fuerza])
 
-            print(f"t={t:.2f}s Raw={raw} mV={mv:.3f} Fuerza={fuerza:.2f}N")
-            time.sleep(0.01)
+            # Mostrar en consola preview
+            print(f"Raw={raw:7d} Δ={delta:7d} Voltaje={mv:8.3f} mV Fuerza={fuerza:9.2f} N")
 
-    return tiempos, voltajes, fuerzas
+            time.sleep(0.01)  # 100 Hz aprox
 
-def graficar(tiempos, voltajes, fuerzas):
-    plt.figure(figsize=(10,5))
-    plt.subplot(2,1,1)
-    plt.plot(tiempos, voltajes, label="Voltaje (mV)")
-    plt.ylabel("mV"); plt.legend()
-
-    plt.subplot(2,1,2)
-    plt.plot(tiempos, fuerzas, color="orange", label="Fuerza (N)")
-    plt.xlabel("Tiempo (s)"); plt.ylabel("N"); plt.legend()
-    plt.tight_layout()
-    plt.show()
+    print(f"\n✅ Logging terminado. Archivo guardado en {nombre_archivo}")
 
 if __name__ == "__main__":
-    duracion = int(input("⏱️  Tiempo de adquisición (segundos): "))
-    filename = input("💾 Nombre de archivo CSV [mediciones.csv]: ") or "mediciones.csv"
-
-    tiempos, voltajes, fuerzas = adquirir_datos(duracion, filename)
-    print(f"\n✅ Datos guardados en {filename}")
-    graficar(tiempos, voltajes, fuerzas)
+    main()
