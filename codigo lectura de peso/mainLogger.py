@@ -72,8 +72,7 @@ def getch(): return sys.stdin.read(1)
 VREF = 5.0
 GAIN = 16     # inicial
 CODE_FS = 0x7fffff
-FS_mV = 4.5   # calibración
-FS_N  = 2943
+FS_mV = 0.154094758   # calibración
 
 def code_to_mV(delta, gain): return (delta * (VREF/gain) / CODE_FS) * 1000.0
 
@@ -100,15 +99,15 @@ try:
             adc.set_diff_ch(); raw=adc.read_data()
             delta=raw-raw_zero
             mv=code_to_mV(delta, GAIN)
-            fuerza=(mv/FS_mV)*FS_N
+            masa=(mv*FS_mV)
             t=time.time()-start
 
             # Guardar CSV
-            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{fuerza:.6f}"])
+            writer.writerow([f"{t:.3f}", raw, delta, f"{mv:.6f}", f"{masa:.6f}"])
 
             # Mostrar consola
-            print("t=%6.2fs GAIN=%2d Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f N"%
-                  (t,GAIN,raw,delta,mv,fuerza))
+            print("t=%6.2fs GAIN=%2d Raw=%7d Δ=%7d Voltaje=%8.3f mV Fuerza=%9.2f kgf"%
+                  (t,GAIN,raw,delta,mv,masa))
             time.sleep(0.01) # ~100 Hz
 
             # Teclas
