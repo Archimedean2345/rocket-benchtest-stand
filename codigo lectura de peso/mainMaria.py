@@ -26,8 +26,8 @@ def module_init():
     GPIO.setup(RST_PIN, GPIO.OUT)
     GPIO.setup(CS_PIN, GPIO.OUT)
     GPIO.setup(DRDY_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.setup(RELAY_PIN, GPIO.OUT)
-    GPIO.output(RELAY_PIN, GPIO.LOW)  # Relay apagado por defecto
+    GPIO.setup(RELAY_PIN, GPIO.OUT, initial=GPIO.LOW)
+    print(f"🔧 RELAY_PIN {RELAY_PIN} configurado como OUTPUT")
     SPI.max_speed_hz, SPI.mode = 20000, 0b01
     return 0
 
@@ -387,6 +387,7 @@ def modo_prueba():
     print(f"\n📋 RESUMEN:")
     print(f"   t=0s → Inicia grabación + countdown")
     print(f"   t={timer_ignicion}s → IGNICIÓN (relay ON por {duracion_relay}s)")
+    print(f"   t={timer_ignicion + duracion_relay}s → RELAY OFF")
     print(f"   t={duracion_total}s → Fin de prueba")
     print(f"\n   GAIN: {config['GAIN']}")
     print(f"   SPS: {config['DRATE']}")
@@ -409,6 +410,23 @@ def modo_prueba():
         return
     
     adc.set_diff_ch()
+    
+    # TEST MANUAL DEL RELAY
+    print("\n🔧 TEST DEL RELAY:")
+    print("Activando relay por 3 segundos...")
+    GPIO.output(RELAY_PIN, GPIO.HIGH)
+    print(f"Estado GPIO después de HIGH: {GPIO.input(RELAY_PIN)}")
+    time.sleep(3)
+    GPIO.output(RELAY_PIN, GPIO.LOW)
+    print(f"Estado GPIO después de LOW: {GPIO.input(RELAY_PIN)}")
+    test_ok = input("¿Se activó el relay correctamente? (s/n): ").strip().lower()
+    
+    if test_ok != 's':
+        print("⚠️  ADVERTENCIA: El relay no funcionó en el test.")
+        print("Verifica las conexiones antes de continuar.")
+        continuar = input("¿Continuar de todas formas? (s/n): ").strip().lower()
+        if continuar != 's':
+            return
     
     # Usar tare guardado o hacer uno nuevo
     usar_tare = input("\n¿Usar tare guardado? (s/n): ").strip().lower()
@@ -436,7 +454,7 @@ def modo_prueba():
     time.sleep(3)
     
     relay_activado = False
-    relay_tiempo_inicio = 0
+    relay_apagado = False  # Nueva bandera para evitar múltiples prints
     
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     filename = f"thrust_test_{timestamp}.csv"
@@ -459,20 +477,28 @@ def modo_prueba():
                 if t >= duracion_total:
                     break
                 
-                # Control de relay
-                if not relay_activado and t >= timer_ignicion:
-                    print(f"\n{'🔥'*20}")
-                    print(f"⚡ IGNICIÓN ACTIVADA - t={t:.2f}s")
-                    print(f"{'🔥'*20}\n")
-                    GPIO.output(RELAY_PIN, GPIO.HIGH)
-                    relay_activado = True
-                    relay_tiempo_inicio = t
+                # CONTROL DEL RELAY - VERSIÓN CORREGIDA
+                tiempo_fin_relay = timer_ignicion + duracion_relay
                 
-                # Apagar relay después de duración
-                if relay_activado and (t - relay_tiempo_inicio) >= duracion_relay:
-                    GPIO.output(RELAY_PIN, GPIO.LOW)
-                    print(f"\n⚠️  RELAY APAGADO - t={t:.2f}s (seguridad)\n")
-                    relay_activado = False  # Evitar reactivar
+                if t >= timer_ignicion and t < tiempo_fin_relay:
+                    # Periodo de activación
+                    if not relay_activado:
+                        print(f"\n{'🔥'*20}")
+                        print(f"⚡ IGNICIÓN ACTIVADA - t={t:.2f}s")
+                        print(f"⚡ Relay permanecerá activo hasta t={tiempo_fin_relay:.2f}s")
+                        print(f"{'🔥'*20}\n")
+                        relay_activado = True
+                    GPIO.output(RELAY_PIN, GPIO.HIGH)
+                else:
+                    # Fuera del periodo de activación
+                    if relay_activado and not relay_apagado:
+                        GPIO.output(RELAY_PIN, GPIO.LOW)
+                        print(f"\n{'⚠️ '*20}")
+                        print(f"⚠️  RELAY APAGADO - t={t:.2f}s")
+                        print(f"{'⚠️ '*20}\n")
+                        relay_apagado = True
+                    elif not relay_activado:
+                        GPIO.output(RELAY_PIN, GPIO.LOW)
                 
                 # Leer datos
                 adc.set_diff_ch()
@@ -518,6 +544,10 @@ def modo_prueba():
     except KeyboardInterrupt:
         GPIO.output(RELAY_PIN, GPIO.LOW)
         print(f"\n\n⚠️  PRUEBA INTERRUMPIDA (Ctrl+C)")
+        print(f"📁 Datos parciales en: {filename}")
+    except Exception as e:
+        GPIO.output(RELAY_PIN, GPIO.LOW)
+        print(f"\n\n❌ ERROR: {e}")
         print(f"📁 Datos parciales en: {filename}")
     
     input("\nPresiona ENTER para continuar...")
@@ -566,9 +596,12 @@ if __name__ == "__main__":
         menu_principal()
     except KeyboardInterrupt:
         print("\n\n⚠️  Sistema interrumpido")
+    except Exception as e:
+        print(f"\n\n❌ ERROR FATAL: {e}")
     finally:
         try:
             GPIO.output(RELAY_PIN, GPIO.LOW)  # Seguridad
+            print("🔒 Relay asegurado en OFF")
         except:
             pass
         GPIO.cleanup()
